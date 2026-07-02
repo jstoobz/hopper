@@ -20,14 +20,20 @@ uvx hopper show
 ```bash
 hopper add P1 "wire up OTEL spans"          # add a todo to the current project
 hopper add P0 "fix login crash" --project tend
+hopper add P2 "random idea" -i               # stash it in the inbox instead
 hopper show                                  # open todos for the current project, by priority
-hopper show --all                            # across all projects
+hopper show --all                            # across all projects, inbox included
+hopper show --include tend,hopper            # a named subset of projects
+hopper show --exclude inbox                  # every project except the inbox
 hopper show --p0                             # only P0s
 hopper done 3                                # close todo #3
+hopper jump 3 --project tend                 # move todo #3 into another project
+hopper jump 3 -i                             # ...or into the inbox
 ```
 
 Priorities are `P0`–`P3`. The current project defaults to the git repository (or
-directory) you're in; override it with `--project`.
+directory) you're in; override it with `--project`, or use `-i`/`--inbox` as a
+shortcut for `--project inbox` — the catch-all for stray todos.
 
 ## JSON output
 

@@ -13,6 +13,15 @@ app = typer.Typer(
     help="A fast, project-aware todo CLI for hopping between work streams.",
     no_args_is_help=True,
     add_completion=False,
+    epilog=(
+        "Examples:\n\n"
+        'hopper add P1 "fix flaky test" --project myrepo\n\n'
+        'hopper add P2 "random idea" -i\n\n'
+        "hopper show --all\n\n"
+        "hopper show --include myrepo,otherrepo\n\n"
+        "hopper show --exclude inbox\n\n"
+        "hopper jump 5 -i"
+    ),
 )
 
 
@@ -150,10 +159,12 @@ def show(
 
 @app.command()
 def done(
-    item_id: int = typer.Argument(..., help="Todo id to close"),
+    item_id: int = typer.Argument(
+        ..., help="Todo id to close (ids are global — no --project needed)"
+    ),
     json_out: bool = typer.Option(False, "--json", help="Machine-readable output"),
 ) -> None:
-    """Close a todo by id."""
+    """Close a todo by id. Ids are global, so no --project is needed."""
     item = store.mark_done(item_id)
     if item is None:
         typer.echo(f"error: no todo with id {item_id}", err=True)
@@ -162,6 +173,31 @@ def done(
         typer.echo(json.dumps(item))
     else:
         typer.echo(f"done #{item['id']}: {item['text']}")
+
+
+@app.command()
+def jump(
+    item_id: int = typer.Argument(..., help="Todo id to move (ids are global)"),
+    project: str | None = typer.Option(None, "--project", "-p", help="Destination project"),
+    inbox: bool = typer.Option(False, "--inbox", "-i", help="Shortcut for --project inbox"),
+    json_out: bool = typer.Option(False, "--json", help="Machine-readable output"),
+) -> None:
+    """Move a todo to a different project by id."""
+    if project is not None and inbox:
+        typer.echo("error: choose at most one of --project/--inbox", err=True)
+        raise typer.Exit(2)
+    if project is None and not inbox:
+        typer.echo("error: specify a destination with --project or --inbox", err=True)
+        raise typer.Exit(2)
+    destination = "inbox" if inbox else project
+    item = store.move(item_id, destination)
+    if item is None:
+        typer.echo(f"error: no todo with id {item_id}", err=True)
+        raise typer.Exit(1)
+    if json_out:
+        typer.echo(json.dumps(item))
+    else:
+        typer.echo(f"jumped #{item['id']} -> {item['project']}: {item['text']}")
 
 
 @app.command()

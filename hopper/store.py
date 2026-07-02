@@ -77,6 +77,15 @@ def mark_done(item_id: int) -> dict | None:
     return None
 
 
+def move(item_id: int, project: str) -> dict | None:
+    with transaction() as data:
+        for item in data["items"]:
+            if item["id"] == item_id:
+                item["project"] = project
+                return item
+    return None
+
+
 def query(
     *,
     include: list[str] | None = None,

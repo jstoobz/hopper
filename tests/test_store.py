@@ -83,3 +83,15 @@ def test_query_exclude_drops_named_projects(root):
     store.add(text="b", priority="P1", project="beta")
     store.add(text="i", priority="P1", project="inbox")
     assert {it["text"] for it in store.query(exclude=["inbox"])} == {"a", "b"}
+
+
+def test_move_changes_project(root):
+    item = store.add(text="x", priority="P2", project="alpha")
+    moved = store.move(item["id"], "beta")
+    assert moved["project"] == "beta"
+    assert [it["text"] for it in store.query(include=["beta"])] == ["x"]
+    assert store.query(include=["alpha"]) == []
+
+
+def test_move_unknown_returns_none(root):
+    assert store.move(999, "beta") is None

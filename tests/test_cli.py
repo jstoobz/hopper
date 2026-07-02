@@ -134,3 +134,55 @@ def test_show_rejects_project_and_inbox_together(root):
 def test_show_rejects_project_and_include_together(root):
     result = runner.invoke(app, ["show", "--project", "foo", "--include", "bar"])
     assert result.exit_code == 2
+
+
+def test_jump_moves_todo_to_named_project(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "--project", "beta"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "--project", "beta", "--json"]).stdout)
+    assert items[0]["text"] == "stray"
+
+
+def test_jump_inbox_flag_moves_to_inbox(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "-i"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "-i", "--json"]).stdout)
+    assert items[0]["text"] == "stray"
+
+
+def test_jump_requires_destination(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1"])
+    assert result.exit_code == 2
+
+
+def test_jump_rejects_project_and_inbox_together(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "--project", "beta", "-i"])
+    assert result.exit_code == 2
+
+
+def test_jump_unknown_id_errors(root):
+    result = runner.invoke(app, ["jump", "999", "-i"])
+    assert result.exit_code == 1
+
+
+def test_jump_json_output(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "--project", "beta", "--json"])
+    item = json.loads(result.stdout)
+    assert item["project"] == "beta"
+
+
+def test_root_help_has_examples_section():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.stdout
+
+
+def test_done_help_notes_ids_are_global():
+    result = runner.invoke(app, ["done", "--help"])
+    assert result.exit_code == 0
+    assert "global" in result.stdout.lower()
