@@ -66,3 +66,71 @@ def test_show_rejects_multiple_priority_flags(root):
 def test_done_unknown_id_errors(root):
     result = runner.invoke(app, ["done", "42"])
     assert result.exit_code == 1
+
+
+def test_add_inbox_flag_sets_project(root):
+    result = runner.invoke(app, ["add", "P1", "stray thought", "-i"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "--project", "inbox", "--json"]).stdout)
+    assert items[0]["project"] == "inbox"
+
+
+def test_add_inbox_long_flag_matches_short(root):
+    result = runner.invoke(app, ["add", "P1", "via long flag", "--inbox"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "--project", "inbox", "--json"]).stdout)
+    assert items[0]["text"] == "via long flag"
+
+
+def test_add_rejects_project_and_inbox_together(root):
+    result = runner.invoke(app, ["add", "P1", "conflict", "--project", "foo", "-i"])
+    assert result.exit_code == 2
+
+
+def test_show_inbox_flag_scopes_to_inbox(root):
+    runner.invoke(app, ["add", "P1", "in inbox", "-i"])
+    runner.invoke(app, ["add", "P1", "in alpha", "--project", "alpha"])
+    shown = runner.invoke(app, ["show", "-i"])
+    assert "in inbox" in shown.stdout
+    assert "in alpha" not in shown.stdout
+
+
+def test_show_all_includes_inbox(root):
+    runner.invoke(app, ["add", "P1", "in inbox", "-i"])
+    runner.invoke(app, ["add", "P1", "in alpha", "--project", "alpha"])
+    shown = runner.invoke(app, ["show", "--all"])
+    assert "in inbox" in shown.stdout
+    assert "in alpha" in shown.stdout
+
+
+def test_show_include_selects_subset(root):
+    runner.invoke(app, ["add", "P1", "a item", "--project", "alpha"])
+    runner.invoke(app, ["add", "P1", "b item", "--project", "beta"])
+    runner.invoke(app, ["add", "P1", "g item", "--project", "gamma"])
+    shown = runner.invoke(app, ["show", "--include", "alpha,beta"])
+    assert "a item" in shown.stdout
+    assert "b item" in shown.stdout
+    assert "g item" not in shown.stdout
+
+
+def test_show_exclude_inbox_is_project_only_view(root):
+    runner.invoke(app, ["add", "P1", "in inbox", "-i"])
+    runner.invoke(app, ["add", "P1", "in alpha", "--project", "alpha"])
+    shown = runner.invoke(app, ["show", "--exclude", "inbox"])
+    assert "in alpha" in shown.stdout
+    assert "in inbox" not in shown.stdout
+
+
+def test_show_rejects_multiple_scope_selectors(root):
+    result = runner.invoke(app, ["show", "--all", "--include", "alpha"])
+    assert result.exit_code == 2
+
+
+def test_show_rejects_project_and_inbox_together(root):
+    result = runner.invoke(app, ["show", "--project", "foo", "-i"])
+    assert result.exit_code == 2
+
+
+def test_show_rejects_project_and_include_together(root):
+    result = runner.invoke(app, ["show", "--project", "foo", "--include", "bar"])
+    assert result.exit_code == 2

@@ -54,18 +54,32 @@ def test_query_excludes_done_by_default(root):
     store.add(text="open one", priority="P1", project="proj")
     closed = store.add(text="closed one", priority="P1", project="proj")
     store.mark_done(closed["id"])
-    assert [it["text"] for it in store.query(project="proj")] == ["open one"]
-    assert len(store.query(project="proj", include_done=True)) == 2
+    assert [it["text"] for it in store.query(include=["proj"])] == ["open one"]
+    assert len(store.query(include=["proj"], include_done=True)) == 2
 
 
 def test_query_sorts_by_priority_then_id(root):
     store.add(text="p2", priority="P2", project="proj")
     store.add(text="p0", priority="P0", project="proj")
-    assert [it["priority"] for it in store.query(project="proj")] == ["P0", "P2"]
+    assert [it["priority"] for it in store.query(include=["proj"])] == ["P0", "P2"]
 
 
-def test_query_scopes_by_project_or_all(root):
+def test_query_include_scopes_to_named_projects(root):
     store.add(text="a", priority="P1", project="alpha")
     store.add(text="b", priority="P1", project="beta")
-    assert len(store.query(project="alpha")) == 1
-    assert len(store.query(all_projects=True)) == 2
+    store.add(text="c", priority="P1", project="gamma")
+    assert {it["text"] for it in store.query(include=["alpha"])} == {"a"}
+    assert {it["text"] for it in store.query(include=["alpha", "beta"])} == {"a", "b"}
+
+
+def test_query_no_filter_returns_all_projects(root):
+    store.add(text="a", priority="P1", project="alpha")
+    store.add(text="b", priority="P1", project="beta")
+    assert len(store.query()) == 2
+
+
+def test_query_exclude_drops_named_projects(root):
+    store.add(text="a", priority="P1", project="alpha")
+    store.add(text="b", priority="P1", project="beta")
+    store.add(text="i", priority="P1", project="inbox")
+    assert {it["text"] for it in store.query(exclude=["inbox"])} == {"a", "b"}
