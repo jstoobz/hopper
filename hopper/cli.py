@@ -86,7 +86,8 @@ def _render(items: list[dict], *, show_project: bool) -> None:
     for it in items:
         proj = f" ({it['project']})" if show_project else ""
         mark = "x" if it["status"] == "done" else " "
-        typer.echo(f"[{mark}] #{it['id']:>3} {it['priority']}{proj}  {it['text']}")
+        added = (it.get("created_at") or "")[:10] or "-" * 10
+        typer.echo(f"[{mark}] #{it['id']:>3} {added} {it['priority']}{proj}  {it['text']}")
 
 
 @app.command()

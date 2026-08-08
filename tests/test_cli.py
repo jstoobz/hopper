@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from typer.testing import CliRunner
@@ -186,3 +187,23 @@ def test_done_help_notes_ids_are_global():
     result = runner.invoke(app, ["done", "--help"])
     assert result.exit_code == 0
     assert "global" in result.stdout.lower()
+
+
+def test_show_renders_the_added_date(root):
+    """The date is the only way to tell what went stale and what just landed."""
+    runner.invoke(app, ["add", "P1", "dated thing", "--project", "x"])
+    result = runner.invoke(app, ["show", "--project", "x"])
+    assert result.exit_code == 0
+    assert re.search(r"#\s*\d+ \d{4}-\d{2}-\d{2} P1", result.stdout), result.stdout
+
+
+def test_show_survives_an_item_with_no_created_at(root):
+    """Pre-dating items must still render rather than KeyError the whole list."""
+    runner.invoke(app, ["add", "P1", "legacy", "--project", "x"])
+    path = root / "backlog.json"
+    data = json.loads(path.read_text())
+    del data["items"][0]["created_at"]
+    path.write_text(json.dumps(data))
+    result = runner.invoke(app, ["show", "--project", "x"])
+    assert result.exit_code == 0
+    assert "legacy" in result.stdout
