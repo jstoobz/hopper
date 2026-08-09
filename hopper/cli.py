@@ -82,12 +82,38 @@ def _resolved_scope(
     return [project or current_project()], None
 
 
+PRIORITY_COLORS = {
+    "P0": typer.colors.BRIGHT_RED,
+    "P1": typer.colors.YELLOW,
+    "P2": typer.colors.CYAN,
+    "P3": typer.colors.BRIGHT_BLACK,
+}
+DIM = typer.colors.BRIGHT_BLACK
+
+
 def _render(items: list[dict], *, show_project: bool) -> None:
+    """Colour is a scanning aid only; click strips it when stdout is not a tty."""
     for it in items:
-        proj = f" ({it['project']})" if show_project else ""
-        mark = "x" if it["status"] == "done" else " "
+        done = it["status"] == "done"
+        mark = "x" if done else " "
         added = (it.get("created_at") or "")[:10] or "-" * 10
-        typer.echo(f"[{mark}] #{it['id']:>3} {added} {it['priority']}{proj}  {it['text']}")
+        proj = (
+            typer.style(f" ({it['project']})", fg=DIM if done else typer.colors.MAGENTA)
+            if show_project
+            else ""
+        )
+        text = it["text"]
+        typer.echo(
+            f"[{mark}] "
+            + typer.style(f"#{it['id']:>3}", fg=DIM)
+            + " "
+            + typer.style(added, fg=DIM)
+            + " "
+            + typer.style(it["priority"], fg=PRIORITY_COLORS.get(it["priority"]), bold=not done)
+            + proj
+            + "  "
+            + (typer.style(text, fg=DIM) if done else text)
+        )
 
 
 @app.command()

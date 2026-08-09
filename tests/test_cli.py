@@ -4,6 +4,7 @@ import re
 import pytest
 from typer.testing import CliRunner
 
+from hopper import cli as cli_module
 from hopper.cli import app
 
 runner = CliRunner()
@@ -207,3 +208,19 @@ def test_show_survives_an_item_with_no_created_at(root):
     result = runner.invoke(app, ["show", "--project", "x"])
     assert result.exit_code == 0
     assert "legacy" in result.stdout
+
+
+def test_show_emits_no_ansi_when_piped(root):
+    """`hopper show | pbcopy` must stay clean — click strips styling off a non-tty."""
+    runner.invoke(app, ["add", "P0", "urgent thing", "--project", "x"])
+    result = runner.invoke(app, ["show", "--project", "x"])
+    assert result.exit_code == 0
+    assert "\x1b[" not in result.stdout, "ANSI leaked into non-tty output"
+    assert "urgent thing" in result.stdout
+
+
+def test_every_priority_has_a_colour():
+    """A priority with no entry renders uncoloured and silently loses the scanning cue."""
+    from hopper import store
+
+    assert set(store.PRIORITIES) == set(cli_module.PRIORITY_COLORS)
