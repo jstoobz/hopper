@@ -1,8 +1,10 @@
 import json
+import re
 
 import pytest
 from typer.testing import CliRunner
 
+from hopper import cli as cli_module
 from hopper.cli import app
 
 runner = CliRunner()
@@ -66,3 +68,159 @@ def test_show_rejects_multiple_priority_flags(root):
 def test_done_unknown_id_errors(root):
     result = runner.invoke(app, ["done", "42"])
     assert result.exit_code == 1
+
+
+def test_add_inbox_flag_sets_project(root):
+    result = runner.invoke(app, ["add", "P1", "stray thought", "-i"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "--project", "inbox", "--json"]).stdout)
+    assert items[0]["project"] == "inbox"
+
+
+def test_add_inbox_long_flag_matches_short(root):
+    result = runner.invoke(app, ["add", "P1", "via long flag", "--inbox"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "--project", "inbox", "--json"]).stdout)
+    assert items[0]["text"] == "via long flag"
+
+
+def test_add_rejects_project_and_inbox_together(root):
+    result = runner.invoke(app, ["add", "P1", "conflict", "--project", "foo", "-i"])
+    assert result.exit_code == 2
+
+
+def test_show_inbox_flag_scopes_to_inbox(root):
+    runner.invoke(app, ["add", "P1", "in inbox", "-i"])
+    runner.invoke(app, ["add", "P1", "in alpha", "--project", "alpha"])
+    shown = runner.invoke(app, ["show", "-i"])
+    assert "in inbox" in shown.stdout
+    assert "in alpha" not in shown.stdout
+
+
+def test_show_all_includes_inbox(root):
+    runner.invoke(app, ["add", "P1", "in inbox", "-i"])
+    runner.invoke(app, ["add", "P1", "in alpha", "--project", "alpha"])
+    shown = runner.invoke(app, ["show", "--all"])
+    assert "in inbox" in shown.stdout
+    assert "in alpha" in shown.stdout
+
+
+def test_show_include_selects_subset(root):
+    runner.invoke(app, ["add", "P1", "a item", "--project", "alpha"])
+    runner.invoke(app, ["add", "P1", "b item", "--project", "beta"])
+    runner.invoke(app, ["add", "P1", "g item", "--project", "gamma"])
+    shown = runner.invoke(app, ["show", "--include", "alpha,beta"])
+    assert "a item" in shown.stdout
+    assert "b item" in shown.stdout
+    assert "g item" not in shown.stdout
+
+
+def test_show_exclude_inbox_is_project_only_view(root):
+    runner.invoke(app, ["add", "P1", "in inbox", "-i"])
+    runner.invoke(app, ["add", "P1", "in alpha", "--project", "alpha"])
+    shown = runner.invoke(app, ["show", "--exclude", "inbox"])
+    assert "in alpha" in shown.stdout
+    assert "in inbox" not in shown.stdout
+
+
+def test_show_rejects_multiple_scope_selectors(root):
+    result = runner.invoke(app, ["show", "--all", "--include", "alpha"])
+    assert result.exit_code == 2
+
+
+def test_show_rejects_project_and_inbox_together(root):
+    result = runner.invoke(app, ["show", "--project", "foo", "-i"])
+    assert result.exit_code == 2
+
+
+def test_show_rejects_project_and_include_together(root):
+    result = runner.invoke(app, ["show", "--project", "foo", "--include", "bar"])
+    assert result.exit_code == 2
+
+
+def test_jump_moves_todo_to_named_project(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "--project", "beta"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "--project", "beta", "--json"]).stdout)
+    assert items[0]["text"] == "stray"
+
+
+def test_jump_inbox_flag_moves_to_inbox(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "-i"])
+    assert result.exit_code == 0
+    items = json.loads(runner.invoke(app, ["show", "-i", "--json"]).stdout)
+    assert items[0]["text"] == "stray"
+
+
+def test_jump_requires_destination(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1"])
+    assert result.exit_code == 2
+
+
+def test_jump_rejects_project_and_inbox_together(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "--project", "beta", "-i"])
+    assert result.exit_code == 2
+
+
+def test_jump_unknown_id_errors(root):
+    result = runner.invoke(app, ["jump", "999", "-i"])
+    assert result.exit_code == 1
+
+
+def test_jump_json_output(root):
+    runner.invoke(app, ["add", "P1", "stray", "--project", "alpha"])
+    result = runner.invoke(app, ["jump", "1", "--project", "beta", "--json"])
+    item = json.loads(result.stdout)
+    assert item["project"] == "beta"
+
+
+def test_root_help_has_examples_section():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "Examples" in result.stdout
+
+
+def test_done_help_notes_ids_are_global():
+    result = runner.invoke(app, ["done", "--help"])
+    assert result.exit_code == 0
+    assert "global" in result.stdout.lower()
+
+
+def test_show_renders_the_added_date(root):
+    """The date is the only way to tell what went stale and what just landed."""
+    runner.invoke(app, ["add", "P1", "dated thing", "--project", "x"])
+    result = runner.invoke(app, ["show", "--project", "x"])
+    assert result.exit_code == 0
+    assert re.search(r"#\s*\d+ \d{4}-\d{2}-\d{2} P1", result.stdout), result.stdout
+
+
+def test_show_survives_an_item_with_no_created_at(root):
+    """Pre-dating items must still render rather than KeyError the whole list."""
+    runner.invoke(app, ["add", "P1", "legacy", "--project", "x"])
+    path = root / "backlog.json"
+    data = json.loads(path.read_text())
+    del data["items"][0]["created_at"]
+    path.write_text(json.dumps(data))
+    result = runner.invoke(app, ["show", "--project", "x"])
+    assert result.exit_code == 0
+    assert "legacy" in result.stdout
+
+
+def test_show_emits_no_ansi_when_piped(root):
+    """`hopper show | pbcopy` must stay clean — click strips styling off a non-tty."""
+    runner.invoke(app, ["add", "P0", "urgent thing", "--project", "x"])
+    result = runner.invoke(app, ["show", "--project", "x"])
+    assert result.exit_code == 0
+    assert "\x1b[" not in result.stdout, "ANSI leaked into non-tty output"
+    assert "urgent thing" in result.stdout
+
+
+def test_every_priority_has_a_colour():
+    """A priority with no entry renders uncoloured and silently loses the scanning cue."""
+    from hopper import store
+
+    assert set(store.PRIORITIES) == set(cli_module.PRIORITY_COLORS)

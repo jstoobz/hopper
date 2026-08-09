@@ -77,19 +77,29 @@ def mark_done(item_id: int) -> dict | None:
     return None
 
 
+def move(item_id: int, project: str) -> dict | None:
+    with transaction() as data:
+        for item in data["items"]:
+            if item["id"] == item_id:
+                item["project"] = project
+                return item
+    return None
+
+
 def query(
     *,
-    project: str | None = None,
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
     priority: str | None = None,
     include_done: bool = False,
-    all_projects: bool = False,
 ) -> list[dict]:
     items = load()["items"]
     result = [
         it
         for it in items
         if (include_done or it["status"] == "open")
-        and (all_projects or project is None or it["project"] == project)
+        and (include is None or it["project"] in include)
+        and (exclude is None or it["project"] not in exclude)
         and (priority is None or it["priority"] == priority)
     ]
     result.sort(key=lambda it: (it["priority"], it["id"]))
